@@ -1,4 +1,5 @@
 import { Innertube } from 'youtubei.js';
+import type { AudioQuality } from '@/settings';
 
 export type Song = {
   id: string;
@@ -30,9 +31,10 @@ export async function searchSongs(query: string): Promise<Song[]> {
 
 // VISIONOS is the only client that returns plain AAC URLs serving the whole file without a PO token;
 // others need tokens or 403 partway through a track. URLs expire after a few hours, so resolve right before use.
-export async function getAudio(id: string): Promise<{ url: string; duration: number }> {
+// 'high' is AAC at ~128 kbps (itag 140); 'normal' is HE-AAC at ~50 kbps (itag 139), under half the size.
+export async function getAudio(id: string, quality: AudioQuality): Promise<{ url: string; duration: number }> {
   const yt = await ytPromise;
   const info = await yt.getBasicInfo(id, { client: 'VISIONOS' });
-  const format = info.chooseFormat({ type: 'audio', format: 'mp4', quality: 'best' });
+  const format = info.chooseFormat({ type: 'audio', format: 'mp4', quality: quality === 'high' ? 'best' : 'bestefficiency' });
   return { url: await format.decipher(yt.session.player), duration: format.approx_duration_ms / 1000 };
 }

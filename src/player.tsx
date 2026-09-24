@@ -3,6 +3,7 @@ import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useSt
 import { Alert } from 'react-native';
 import { localAudioUri } from '@/library';
 import { moveItem } from '@/list';
+import { settings } from '@/settings';
 import { getAudio, Song } from '@/yt';
 
 type Queue = { songs: Song[]; index: number };
@@ -49,7 +50,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       const local = localAudioUri(song.id);
-      const stream = local ? undefined : await getAudio(song.id);
+      const stream = local ? undefined : await getAudio(song.id, settings.audioQuality());
       // A later tap may have started resolving another song while this one was in flight.
       if (latestId.current !== song.id) return;
       setSource(local ? 'file' : 'stream');

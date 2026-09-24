@@ -2,8 +2,11 @@ import { Directory, DownloadTask, File, FileMode, Paths } from 'expo-file-system
 import { getNetworkStateAsync, NetworkStateType } from 'expo-network';
 import { openDatabaseSync } from 'expo-sqlite';
 import Storage from 'expo-sqlite/kv-store';
+import { createAudioPlayer } from 'expo-audio';
+import { getDocumentAsync } from 'expo-document-picker';
 import { createContext, ReactNode, useContext, useMemo, useRef, useState } from 'react';
 import { Alert } from 'react-native';
+import { settings } from '@/settings';
 import { getAudio, Song } from '@/yt';
 
 export type LibrarySong = Song & { addedAt: number };
@@ -56,7 +59,8 @@ const songsDir = new Directory(Paths.document, 'songs');
 songsDir.create({ idempotent: true });
 
 // Files are located by song id rather than a stored URI: the app container path changes between installs.
-const audioFile = (id: string) => new File(songsDir, `${id}.m4a`);
+// Imported songs keep their extension in the id (`import-….mp3`); YouTube ids never contain a dot.
+const audioFile = (id: string) => new File(songsDir, id.includes('.') ? id : `${id}.m4a`);
 const artworkFile = (id: string) => new File(songsDir, `${id}.jpg`);
 
 // YouTube's fragmented m4a files also store the full length in the moov header, and AVPlayer adds that to the
@@ -99,7 +103,26 @@ export function localAudioUri(id: string) {
   return file.exists ? file.uri : undefined;
 }
 
-export const isWifiOnly = () => Storage.getItemSync('wifiOnly') !== 'false';
+export function downloadsSize() {
+  return songsDir.list().reduce((total, item) => total + (item instanceof File ? item.size : 0), 0);
+}
+
+// Waits for AVPlayer to load the file, since imported files come with no length metadata of our own.
+function probeDuration(uri: string) {
+  return new Promise<number>((resolve) => {
+    const probe = createAudioPlayer(uri);
+    const finish = (seconds: number) => {
+      clearTimeout(timeout);
+      sub.remove();
+      probe.remove();
+      resolve(seconds);
+    };
+    const sub = probe.addListener('playbackStatusUpdate', (status) => {
+      if (status.isLoaded && status.duration > 0) finish(status.duration);
+    });
+    const timeout = setTimeout(() => finish(0), 5000);
+  });
+}
 
 function loadSongs(table: 'songs' | 'liked_songs'): LibrarySong[] {
   return db.getAllSync<SongRecord>(`SELECT * FROM ${table} ORDER BY added_at DESC`).map((r) => {
@@ -147,7 +170,7 @@ export function loadPlaylistSongs(playlistId: number): Song[] {
 }
 
 async function allowedOnCurrentNetwork() {
-  if (!isWifiOnly()) return true;
+  if (!settings.wifiOnly()) return true;
   const { type } = await getNetworkStateAsync();
   if (type !== NetworkStateType.CELLULAR) return true;
   return new Promise<boolean>((resolve) =>
@@ -175,6 +198,8 @@ type LibraryContextValue = {
   download: (song: Song) => Promise<void>;
   cancel: (id: string) => void;
   remove: (song: Song) => void;
+  removeAllDownloads: () => void;
+  importFiles: () => Promise<number>;
   playlists: Playlist[];
   addToPlaylist: (playlistId: number, song: Song) => void;
   createPlaylist: (name: string) => number;
@@ -215,7 +240,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     setSongProgress(song.id, 0);
     const file = audioFile(song.id);
     try {
-      const { url } = await getAudio(song.id);
+      const { url } = await getAudio(song.id, settings.audioQuality());
       if (cancelled.current.has(song.id)) return;
       deleteIfExists(file);
       let lastPercent = 0;
@@ -267,6 +292,36 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     deleteIfExists(artworkFile(song.id));
     db.runSync('DELETE FROM songs WHERE id = ?', song.id);
     setSongs(loadSongs('songs'));
+  }
+
+  function removeAllDownloads() {
+    for (const item of songsDir.list()) {
+      if (item instanceof File) item.delete();
+    }
+    db.runSync('DELETE FROM songs');
+    setSongs(loadSongs('songs'));
+  }
+
+  async function importFiles() {
+    const result = await getDocumentAsync({ type: 'audio/*', multiple: true, copyToCacheDirectory: true });
+    if (result.canceled) return 0;
+    for (const asset of result.assets) {
+      const dot = asset.name.lastIndexOf('.');
+      const ext = dot > 0 ? asset.name.slice(dot + 1).toLowerCase() : 'm4a';
+      const id = `import-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const file = audioFile(id);
+      await new File(asset.uri).move(file);
+      db.runSync(
+        'INSERT INTO songs (id, title, artist, duration, artwork, added_at) VALUES (?, ?, ?, ?, NULL, ?)',
+        id,
+        dot > 0 ? asset.name.slice(0, dot) : asset.name,
+        'Imported',
+        Math.round(await probeDuration(file.uri)),
+        Date.now(),
+      );
+    }
+    setSongs(loadSongs('songs'));
+    return result.assets.length;
   }
 
   function addToPlaylist(playlistId: number, song: Song) {
@@ -335,7 +390,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const isLiked = (id: string) => likedIds.has(id);
 
   return (
-    <LibraryContext.Provider value={{ songs, progress, isDownloaded, download, cancel, remove, playlists, addToPlaylist, createPlaylist, renamePlaylist, deletePlaylist, reorderPlaylist, removeFromPlaylist, liked, isLiked, toggleLike }}>
+    <LibraryContext.Provider value={{ songs, progress, isDownloaded, download, cancel, remove, removeAllDownloads, importFiles, playlists, addToPlaylist, createPlaylist, renamePlaylist, deletePlaylist, reorderPlaylist, removeFromPlaylist, liked, isLiked, toggleLike }}>
       {children}
     </LibraryContext.Provider>
   );

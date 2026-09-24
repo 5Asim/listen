@@ -1,7 +1,7 @@
 import { useAudioPlayerStatus } from 'expo-audio';
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { ActivityIndicator, Alert, GestureResponderEvent, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActionSheetIOS, ActivityIndicator, Alert, GestureResponderEvent, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '@/components/Icon';
 import { LikeButton } from '@/components/LikeButton';
 import { ProgressRing } from '@/components/ProgressRing';
@@ -81,8 +81,72 @@ function DownloadAction() {
   );
 }
 
+const sleepChoices: { label: string; value: number | 'end' }[] = [
+  { label: '15 minutes', value: 15 },
+  { label: '30 minutes', value: 30 },
+  { label: '45 minutes', value: 45 },
+  { label: '1 hour', value: 60 },
+  { label: 'End of song', value: 'end' },
+];
+
+function SleepAction() {
+  const { sleepTimer, setSleepTimer } = usePlayer();
+  const active = sleepTimer !== undefined;
+  const [now, setNow] = useState(Date.now);
+
+  useEffect(() => {
+    if (typeof sleepTimer !== 'number') return;
+    const id = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(id);
+  }, [sleepTimer]);
+
+  function choose() {
+    const options = [...sleepChoices.map((c) => c.label), ...(active ? ['Turn Off Timer'] : []), 'Cancel'];
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        title: 'Sleep Timer',
+        options,
+        cancelButtonIndex: options.length - 1,
+        destructiveButtonIndex: active ? sleepChoices.length : undefined,
+        userInterfaceStyle: 'dark',
+      },
+      (i) => {
+        setNow(Date.now());
+        if (i < sleepChoices.length) setSleepTimer(sleepChoices[i].value);
+        else if (active && i === sleepChoices.length) setSleepTimer(undefined);
+      },
+    );
+  }
+
+  let label = 'Timer';
+  if (sleepTimer === 'end') label = 'End of song';
+  else if (sleepTimer !== undefined) label = `${Math.max(1, Math.ceil((sleepTimer - now) / 60_000))} min`;
+
+  return (
+    <Pressable style={styles.action} onPress={choose}>
+      <Icon name="bedtime" color={active ? colors.accent : colors.text} />
+      <Text style={[styles.actionLabel, active && { color: colors.accent }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 export default function NowPlayingScreen() {
-  const { player, current, upNext, source, streamDuration, loading, next, previous } = usePlayer();
+  const {
+    player,
+    current,
+    upNext,
+    autoplay,
+    source,
+    streamDuration,
+    loading,
+    next,
+    previous,
+    repeat,
+    shuffled,
+    cycleRepeat,
+    toggleShuffle,
+  } = usePlayer();
+  const hasNext = upNext.length > 0 || autoplay.length > 0 || repeat === 'all';
   const status = useAudioPlayerStatus(player);
   if (!current) return null;
 
@@ -117,6 +181,9 @@ export default function NowPlayingScreen() {
         </View>
         <SeekBar position={status.currentTime} duration={duration} onSeek={(s) => player.seekTo(s)} />
         <View style={styles.controls}>
+          <Pressable style={styles.tapTarget} onPress={toggleShuffle}>
+            <Icon name="shuffle" size={26} color={shuffled ? colors.accent : colors.muted} />
+          </Pressable>
           <Pressable style={styles.tapTarget} onPress={previous}>
             <Icon name="skip_previous" size={40} color={colors.text} />
           </Pressable>
@@ -128,11 +195,14 @@ export default function NowPlayingScreen() {
             )}
           </Pressable>
           <Pressable
-            style={[styles.tapTarget, upNext.length === 0 && styles.disabled]}
-            disabled={upNext.length === 0}
+            style={[styles.tapTarget, !hasNext && styles.disabled]}
+            disabled={!hasNext}
             onPress={next}
           >
             <Icon name="skip_next" size={40} color={colors.text} />
+          </Pressable>
+          <Pressable style={styles.tapTarget} onPress={cycleRepeat}>
+            <Icon name={repeat === 'one' ? 'repeat_one' : 'repeat'} size={26} color={repeat === 'off' ? colors.muted : colors.accent} />
           </Pressable>
         </View>
         <View style={styles.secondary}>
@@ -145,6 +215,7 @@ export default function NowPlayingScreen() {
             <Icon name="queue_music" color={colors.text} />
             <Text style={styles.actionLabel}>Queue</Text>
           </Pressable>
+          <SleepAction />
         </View>
       </View>
     </View>
@@ -185,7 +256,7 @@ const styles = StyleSheet.create({
   seekFill: { height: 4, backgroundColor: colors.accent },
   seekTimes: { flexDirection: 'row', justifyContent: 'space-between' },
   time: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted },
-  controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 40, height: 82 },
+  controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 82 },
   playButton: {
     width: 72,
     height: 72,
@@ -196,6 +267,6 @@ const styles = StyleSheet.create({
   },
   disabled: { opacity: 0.3 },
   secondary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', height: 60 },
-  action: { width: 88, height: 56, gap: 3, alignItems: 'center', justifyContent: 'center' },
+  action: { width: 80, height: 56, gap: 3, alignItems: 'center', justifyContent: 'center' },
   actionLabel: { fontFamily: fonts.regular, fontSize: 11, color: colors.muted },
 });

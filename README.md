@@ -10,8 +10,12 @@ A personal iPhone music player: search YouTube Music, stream songs, download the
 - **Stream** audio-only AAC (about 1 MB per minute), with background playback, lock-screen and Dynamic Island controls.
 - **Download** songs for offline playback. Downloaded songs always play from the device.
 - **Like** songs and browse them in Liked Songs.
-- **Playlists** with artwork collages, drag to reorder, swipe to remove.
-- **Queue** with Up Next, Play Next / Add to Queue, shuffle, and auto-advance.
+- **Playlists** with artwork collages, drag to reorder, swipe to remove, and download-all.
+- **Home** with recently played, songs related to what you like, and the Global and India charts.
+- **Autoplay**: when your list ends, related songs from YouTube Music's radio keep playing.
+- **Queue** with Up Next, Play Next / Add to Queue, shuffle, repeat, and a sleep timer.
+- **Listening stats**: minutes listened, top songs and top artists by week, month, or all time.
+- **Home Screen widget** showing what's playing.
 - **Offline mode**: songs that aren't downloaded are dimmed when there's no connection.
 
 ## Tech stack
@@ -25,6 +29,7 @@ A personal iPhone music player: search YouTube Music, stream songs, download the
 | Downloads | expo-file-system (background download tasks) |
 | Storage | expo-sqlite (library, playlists, likes) and its key-value store (settings) |
 | Gestures | react-native-gesture-handler, react-native-reanimated |
+| Widget | expo-widgets + @expo/ui (SwiftUI from JSX) |
 | Design | [pen.dev](https://pen.dev) file: `listen.pen` |
 
 ## Getting started
@@ -101,7 +106,9 @@ If YouTube changes something and playback breaks, the fix almost always belongs 
 - [x] Search, streaming, Now Playing
 - [x] Downloads and offline playback
 - [x] Likes, playlists, queue
-- [ ] Settings: Wi-Fi-only downloads, storage, Import from Files
-- [ ] TestFlight build
+- [x] Settings: Wi-Fi-only downloads, storage, Import from Files
+- [x] TestFlight build
+- [x] Home, autoplay, repeat/shuffle, sleep timer, stats, widget
+- [ ] Artist and album pages
 - [ ] Spotify playlist import
 - [ ] Next/previous on the lock screen and Dynamic Island

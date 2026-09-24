@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { CollectionActions } from '@/components/CollectionActions';
 import { Icon } from '@/components/Icon';
 import { HeartIcon } from '@/components/LikeButton';
 import { SongRow } from '@/components/SongRow';
@@ -23,6 +24,11 @@ export default function LikedSongsScreen() {
         <Text style={styles.count}>
           {liked.length} {liked.length === 1 ? 'song' : 'songs'}
         </Text>
+        {liked.length > 0 && (
+          <View style={styles.actions}>
+            <CollectionActions songs={liked} />
+          </View>
+        )}
       </View>
       {liked.length === 0 ? (
         <StateMessage
@@ -46,4 +52,5 @@ const styles = StyleSheet.create({
   back: { width: 44, height: 44, marginLeft: 8, alignItems: 'center', justifyContent: 'center' },
   header: { paddingHorizontal: 16, paddingBottom: 12, gap: 2 },
   count: { fontFamily: fonts.regular, fontSize: 15, color: colors.muted },
+  actions: { marginTop: 14 },
 });

@@ -9,7 +9,18 @@ import { usePlayer } from '@/player';
 import { colors, fonts } from '@/theme';
 
 export default function QueueSheet() {
-  const { current, upNext, jumpToUpNext, moveUpNext, removeUpNext } = usePlayer();
+  const {
+    current,
+    upNext,
+    autoplay,
+    autoplaySeed,
+    jumpToUpNext,
+    moveUpNext,
+    removeUpNext,
+    jumpToAutoplay,
+    moveAutoplay,
+    removeAutoplay,
+  } = usePlayer();
 
   return (
     <View style={styles.container}>
@@ -35,21 +46,48 @@ export default function QueueSheet() {
             />
           </>
         )}
-        <Text style={styles.label}>UP NEXT</Text>
-        {upNext.length === 0 ? (
-          <Text style={styles.empty}>Nothing up next. Use ⋯ → Add to Queue on any song.</Text>
-        ) : (
-          <ReorderableList
-            data={upNext}
-            keyOf={(s) => s.id}
-            rowHeight={ROW_HEIGHT.regular}
-            onMove={moveUpNext}
-            renderRow={(song, i, handle) => (
-              <SwipeToRemove onRemove={() => removeUpNext(i)}>
-                <ListRow song={song} subtitle={song.artist} trailing={handle} onPress={() => jumpToUpNext(i)} />
-              </SwipeToRemove>
+        {upNext.length > 0 && (
+          <>
+            <Text style={styles.label}>UP NEXT</Text>
+            <ReorderableList
+              data={upNext}
+              keyOf={(s) => s.id}
+              rowHeight={ROW_HEIGHT.regular}
+              onMove={moveUpNext}
+              renderRow={(song, i, handle) => (
+                <SwipeToRemove onRemove={() => removeUpNext(i)}>
+                  <ListRow song={song} subtitle={song.artist} trailing={handle} onPress={() => jumpToUpNext(i)} />
+                </SwipeToRemove>
+              )}
+            />
+          </>
+        )}
+        {autoplay.length > 0 && (
+          <>
+            <Text style={styles.label}>AUTOPLAY</Text>
+            {autoplaySeed && (
+              <Text numberOfLines={1} style={styles.caption}>
+                Songs related to {autoplaySeed.title}
+              </Text>
             )}
-          />
+            <ReorderableList
+              data={autoplay}
+              keyOf={(s) => s.id}
+              rowHeight={ROW_HEIGHT.regular}
+              onMove={moveAutoplay}
+              renderRow={(song, i, handle) => (
+                <SwipeToRemove onRemove={() => removeAutoplay(i)}>
+                  <ListRow song={song} subtitle={song.artist} trailing={handle} onPress={() => jumpToAutoplay(i)} />
+                </SwipeToRemove>
+              )}
+            />
+          </>
+        )}
+        {upNext.length === 0 && autoplay.length === 0 && (
+          <>
+            <Text style={styles.label}>UP NEXT</Text>
+            <Text style={styles.empty}>Nothing up next. Use ⋯ → Add to Queue on any song.</Text>
+          </>
         )}
       </ScrollView>
     </View>
@@ -72,5 +110,6 @@ const styles = StyleSheet.create({
   content: { paddingBottom: 24 },
   label: { fontFamily: fonts.semibold, fontSize: 12, color: colors.muted, paddingHorizontal: 16, marginTop: 12 },
   indicator: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  caption: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted, paddingHorizontal: 16, marginTop: 2, marginBottom: 4 },
   empty: { fontFamily: fonts.regular, fontSize: 15, color: colors.muted, paddingHorizontal: 16, marginTop: 12 },
 });

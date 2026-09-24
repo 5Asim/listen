@@ -46,6 +46,24 @@ CREATE TABLE IF NOT EXISTS playlist_songs (
   position INTEGER NOT NULL,
   PRIMARY KEY (playlist_id, song_id)
 );
+CREATE TABLE IF NOT EXISTS history (
+  id TEXT PRIMARY KEY NOT NULL,
+  title TEXT NOT NULL,
+  artist TEXT NOT NULL,
+  duration INTEGER NOT NULL,
+  artwork TEXT,
+  added_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS plays (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  song_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  artist TEXT NOT NULL,
+  artwork TEXT,
+  played_at INTEGER NOT NULL,
+  seconds REAL NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS plays_played_at ON plays (played_at);
 CREATE TABLE IF NOT EXISTS liked_songs (
   id TEXT PRIMARY KEY NOT NULL,
   title TEXT NOT NULL,
@@ -124,7 +142,7 @@ function probeDuration(uri: string) {
   });
 }
 
-function loadSongs(table: 'songs' | 'liked_songs'): LibrarySong[] {
+function loadSongs(table: 'songs' | 'liked_songs' | 'history'): LibrarySong[] {
   return db.getAllSync<SongRecord>(`SELECT * FROM ${table} ORDER BY added_at DESC`).map((r) => {
     return {
       id: r.id,
@@ -187,6 +205,73 @@ function remoteArtwork(song: Song) {
   return db.getFirstSync<{ artwork: string | null }>('SELECT artwork FROM songs WHERE id = ?', song.id)?.artwork ?? null;
 }
 
+export function recordPlay(song: Song) {
+  db.runSync(
+    'INSERT OR REPLACE INTO history (id, title, artist, duration, artwork, added_at) VALUES (?, ?, ?, ?, ?, ?)',
+    song.id,
+    song.title,
+    song.artist,
+    song.duration,
+    remoteArtwork(song),
+    Date.now(),
+  );
+  db.runSync('DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY added_at DESC LIMIT 50)');
+}
+
+export const loadHistory = () => loadSongs('history');
+
+export function startPlay(song: Song) {
+  return db.runSync(
+    'INSERT INTO plays (song_id, title, artist, artwork, played_at) VALUES (?, ?, ?, ?, ?)',
+    song.id,
+    song.title,
+    song.artist,
+    remoteArtwork(song),
+    Date.now(),
+  ).lastInsertRowId;
+}
+
+export function addListenTime(playId: number, seconds: number) {
+  db.runSync('UPDATE plays SET seconds = seconds + ? WHERE id = ?', seconds, playId);
+}
+
+export type TopSong = Song & { plays: number };
+export type TopArtist = { name: string; plays: number };
+export type Stats = { minutes: number; plays: number; artists: number; topSongs: TopSong[]; topArtists: TopArtist[] };
+
+// Like most services, a play only counts after 30 seconds; listening time counts every second.
+export function loadStats(since: number): Stats {
+  const minutes =
+    (db.getFirstSync<{ total: number | null }>('SELECT SUM(seconds) AS total FROM plays WHERE played_at >= ?', since)
+      ?.total ?? 0) / 60;
+  const rows = db.getAllSync<{ song_id: string; title: string; artist: string; artwork: string | null; plays: number; seconds: number }>(
+    `SELECT song_id, title, artist, artwork, COUNT(*) AS plays, SUM(seconds) AS seconds
+     FROM plays WHERE played_at >= ? AND seconds >= 30
+     GROUP BY song_id ORDER BY plays DESC, seconds DESC`,
+    since,
+  );
+  const byArtist = new Map<string, number>();
+  for (const r of rows) {
+    // Credit the lead artist, so "A, B" and "A" count as the same artist.
+    const lead = r.artist.split(', ')[0];
+    byArtist.set(lead, (byArtist.get(lead) ?? 0) + r.plays);
+  }
+  return {
+    minutes,
+    plays: rows.reduce((sum, r) => sum + r.plays, 0),
+    artists: byArtist.size,
+    topSongs: rows.slice(0, 10).map((r) => ({
+      id: r.song_id,
+      title: r.title,
+      artist: r.artist,
+      duration: 0,
+      artwork: localOr(r.song_id, r.artwork),
+      plays: r.plays,
+    })),
+    topArtists: [...byArtist].map(([name, plays]) => ({ name, plays })).sort((a, b) => b.plays - a.plays).slice(0, 5),
+  };
+}
+
 function deleteIfExists(file: File) {
   if (file.exists) file.delete();
 }
@@ -196,6 +281,8 @@ type LibraryContextValue = {
   progress: Record<string, number>;
   isDownloaded: (id: string) => boolean;
   download: (song: Song) => Promise<void>;
+  downloadAll: (songs: Song[]) => Promise<void>;
+  cancelAll: (ids: string[]) => void;
   cancel: (id: string) => void;
   remove: (song: Song) => void;
   removeAllDownloads: () => void;
@@ -233,9 +320,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     });
   }
 
-  async function download(song: Song) {
-    if (song.id in progress || downloadedIds.has(song.id)) return;
-    if (!(await allowedOnCurrentNetwork())) return;
+  // Throws on failure; callers decide how to report it.
+  async function fetchSong(song: Song) {
     cancelled.current.delete(song.id);
     setSongProgress(song.id, 0);
     const file = audioFile(song.id);
@@ -275,10 +361,40 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       setSongs(loadSongs('songs'));
     } catch (e) {
       deleteIfExists(file);
-      if (!cancelled.current.has(song.id)) Alert.alert("Couldn't download this song", String(e));
+      if (!cancelled.current.has(song.id)) throw e;
     } finally {
       tasks.current.delete(song.id);
       setSongProgress(song.id);
+    }
+  }
+
+  async function download(song: Song) {
+    if (song.id in progress || downloadedIds.has(song.id)) return;
+    if (!(await allowedOnCurrentNetwork())) return;
+    await fetchSong(song).catch((e) => Alert.alert("Couldn't download this song", String(e)));
+  }
+
+  async function downloadAll(list: Song[]) {
+    const pending = list.filter((s) => !(s.id in progress) && !downloadedIds.has(s.id));
+    if (!pending.length || !(await allowedOnCurrentNetwork())) return;
+    for (const song of pending) cancelled.current.delete(song.id);
+    let failed = 0;
+    // Two at a time: quick, without starving the song that's playing of bandwidth.
+    const worker = async () => {
+      for (let song = pending.shift(); song; song = pending.shift()) {
+        if (cancelled.current.has(song.id)) continue;
+        await fetchSong(song).catch(() => failed++);
+      }
+    };
+    await Promise.all([worker(), worker()]);
+    if (failed) Alert.alert('Some songs didn\'t download', `${failed} of the songs couldn't be downloaded. Try again later.`);
+  }
+
+  // Cancels running downloads and any in the list that haven't started yet.
+  function cancelAll(ids: string[]) {
+    for (const id of ids) {
+      cancelled.current.add(id);
+      tasks.current.get(id)?.cancel();
     }
   }
 
@@ -390,7 +506,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const isLiked = (id: string) => likedIds.has(id);
 
   return (
-    <LibraryContext.Provider value={{ songs, progress, isDownloaded, download, cancel, remove, removeAllDownloads, importFiles, playlists, addToPlaylist, createPlaylist, renamePlaylist, deletePlaylist, reorderPlaylist, removeFromPlaylist, liked, isLiked, toggleLike }}>
+    <LibraryContext.Provider value={{ songs, progress, isDownloaded, download, downloadAll, cancelAll, cancel, remove, removeAllDownloads, importFiles, playlists, addToPlaylist, createPlaylist, renamePlaylist, deletePlaylist, reorderPlaylist, removeFromPlaylist, liked, isLiked, toggleLike }}>
       {children}
     </LibraryContext.Provider>
   );

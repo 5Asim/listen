@@ -100,6 +100,11 @@ export default function SongMenuSheet() {
             />
           )}
           <Row
+            icon={<Icon name="radio" color={colors.text} />}
+            label="Start Radio"
+            onPress={() => closeThen(() => play(song))}
+          />
+          <Row
             icon={<Icon name="queue_play_next" color={colors.text} />}
             label="Play Next"
             onPress={() => closeThen(() => playNext(song))}

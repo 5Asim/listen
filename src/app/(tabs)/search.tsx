@@ -85,7 +85,7 @@ export default function SearchScreen() {
             song={item}
             active={item.id === current?.id}
             disabled={offline && !isDownloaded(item.id)}
-            onPress={() => play(item, results)}
+            onPress={() => play(item)}
           />
         )}
       />

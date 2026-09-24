@@ -21,7 +21,8 @@ export default function TabsLayout() {
         tabBarLabelStyle: { fontFamily: fonts.semibold, fontSize: 10 },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Search', tabBarIcon: ({ color }) => <Icon name="search" size={25} color={color} /> }} />
+      <Tabs.Screen name="(home)" options={{ title: 'Home', tabBarIcon: ({ color }) => <Icon name="home" size={25} color={color} /> }} />
+      <Tabs.Screen name="search" options={{ title: 'Search', tabBarIcon: ({ color }) => <Icon name="search" size={25} color={color} /> }} />
       <Tabs.Screen name="library" options={{ title: 'Library', tabBarIcon: ({ color }) => <Icon name="library_music" size={25} color={color} /> }} />
       <Tabs.Screen name="settings" options={{ title: 'Settings', tabBarIcon: ({ color }) => <Icon name="settings" size={25} color={color} /> }} />
     </Tabs>

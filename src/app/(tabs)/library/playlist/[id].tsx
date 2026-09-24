@@ -4,6 +4,7 @@ import { ActionSheetIOS, Alert, Pressable, StyleSheet, Text, View } from 'react-
 import { ScrollView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Collage } from '@/components/Collage';
+import { CollectionActions } from '@/components/CollectionActions';
 import { Icon } from '@/components/Icon';
 import { ListRow, ROW_HEIGHT } from '@/components/ListRow';
 import { ReorderableList } from '@/components/ReorderableList';
@@ -25,7 +26,7 @@ export default function PlaylistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const playlistId = Number(id);
   const { playlists, renamePlaylist, deletePlaylist, reorderPlaylist, removeFromPlaylist } = useLibrary();
-  const { current, play, shuffle } = usePlayer();
+  const { current, play } = usePlayer();
   const playlist = playlists.find((p) => p.id === playlistId);
   // `playlist` is a fresh object after every playlist edit, which is the signal to re-read its songs.
   const songs = useMemo(() => (playlist ? loadPlaylistSongs(playlist.id) : []), [playlist]);
@@ -94,16 +95,7 @@ export default function PlaylistScreen() {
           </View>
           {songs.length > 0 && (
             <>
-              <View style={styles.actions}>
-                <Pressable style={[styles.button, styles.playButton]} onPress={() => play(songs[0], songs)}>
-                  <Icon name="play_arrow" size={22} color="#000000" />
-                  <Text style={[styles.buttonLabel, { color: '#000000' }]}>Play</Text>
-                </Pressable>
-                <Pressable style={[styles.button, styles.shuffleButton]} onPress={() => shuffle(songs)}>
-                  <Icon name="shuffle" size={22} color={colors.text} />
-                  <Text style={styles.buttonLabel}>Shuffle</Text>
-                </Pressable>
-              </View>
+              <CollectionActions songs={songs} />
               <Text style={styles.sectionLabel}>SONGS</Text>
             </>
           )}
@@ -150,10 +142,5 @@ const styles = StyleSheet.create({
   info: { flex: 1, gap: 7 },
   name: { fontFamily: fonts.bold, fontSize: 26, color: colors.text },
   meta: { fontFamily: fonts.regular, fontSize: 14, color: colors.muted },
-  actions: { flexDirection: 'row', gap: 12 },
-  button: { flex: 1, height: 50, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  playButton: { backgroundColor: colors.accent },
-  shuffleButton: { backgroundColor: colors.surface },
-  buttonLabel: { fontFamily: fonts.bold, fontSize: 16, color: colors.text },
   sectionLabel: { fontFamily: fonts.semibold, fontSize: 12, color: colors.muted },
 });

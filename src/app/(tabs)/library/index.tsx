@@ -54,6 +54,16 @@ function SongsTab() {
         </View>
         <Icon name="chevron_right" color={colors.muted} />
       </Pressable>
+      <Pressable style={styles.likedRow} onPress={() => router.push('/library/stats')}>
+        <View style={styles.likedTile}>
+          <Icon name="insights" color={colors.accent} />
+        </View>
+        <View style={styles.likedText}>
+          <Text style={styles.likedTitle}>Listening stats</Text>
+          <Text style={styles.likedCount}>Your top songs and artists</Text>
+        </View>
+        <Icon name="chevron_right" color={colors.muted} />
+      </Pressable>
       {songs.length > 0 && (
         <View style={styles.sortRow}>
           <Text style={styles.sortTitle}>Downloaded songs</Text>
@@ -75,7 +85,7 @@ function SongsTab() {
           title="No downloads yet"
           description="Download songs to listen without an internet connection."
         >
-          <Pressable style={styles.cta} onPress={() => router.navigate('/')}>
+          <Pressable style={styles.cta} onPress={() => router.navigate('/search')}>
             <Icon name="search" size={22} color="#000000" />
             <Text style={styles.ctaLabel}>Find songs</Text>
           </Pressable>

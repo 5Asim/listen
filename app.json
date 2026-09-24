@@ -9,7 +9,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.asim.listen",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "config": {
         "usesNonExemptEncryption": false
       },
@@ -53,6 +53,27 @@
           "backgroundColor": "#000000",
           "image": "./assets/splash-icon.png",
           "imageWidth": 120
+        }
+      ],
+      "./plugins/withoutPushEntitlement",
+      [
+        "expo-widgets",
+        {
+          "bundleIdentifier": "com.asim.listen.widget",
+          "groupIdentifier": "group.com.asim.listen",
+          "widgets": [
+            {
+              "name": "NowPlaying",
+              "displayName": "Now Playing",
+              "description": "What you're listening to on Listen",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall",
+                  "systemMedium"
+                ]
+              }
+            }
+          ]
         }
       ]
     ],
